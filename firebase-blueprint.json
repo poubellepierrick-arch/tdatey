@@ -1,0 +1,49 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Profil utilisateur avec le compteur de pièces et les options du thème esthétique",
+      "type": "object",
+      "properties": {
+        "coins": {
+          "type": "integer",
+          "description": "Compteur de pièces"
+        },
+        "debt": {
+          "type": "integer",
+          "description": "Dette virtuelle accumulée"
+        },
+        "themeStyle": {
+          "type": "string",
+          "description": "Thème esthétique (memphis, cosmic, brutalist)"
+        }
+      },
+      "required": ["coins", "debt"]
+    },
+    "AppDatabase": {
+      "title": "AppDatabase",
+      "description": "Base de données d'état applicatif unifié stockée par utilisateur dans Firestore",
+      "type": "object",
+      "properties": {
+        "tasks": {
+          "type": "array",
+          "description": "Liste des tâches"
+        },
+        "habits": {
+          "type": "array",
+          "description": "Liste des habitudes comportementales"
+        },
+        "userProfile": {
+          "$ref": "#/entities/UserProfile",
+          "description": "Profil et configuration utilisateur"
+        }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "AppDatabase",
+      "description": "Document unique hébergeant l'intégralité de l'état applicatif d'un utilisateur synchronisé"
+    }
+  }
+}

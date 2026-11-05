@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ᵗ°ᵈ°</title>
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="ᵗ°ᵈ°" />
+    <meta name="theme-color" content="#FFE500" />
+    <link rel="apple-touch-icon" href="https://amac.neocities.org/todologomenphis.png" />
+    <link rel="icon" type="image/png" href="https://amac.neocities.org/todologomenphis.png" />
+    <script>
+      // Suppression précoce et définitive des rejections et erreurs WebSocket liées à l'HMR de Vite
+      window.addEventListener('unhandledrejection', function (event) {
+        if (event.reason) {
+          const reasonStr = event.reason.message || event.reason.toString() || '';
+          if (reasonStr.includes('WebSocket') || reasonStr.includes('websocket')) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+        }
+      }, true);
+
+      window.addEventListener('error', function (event) {
+        if (event.message) {
+          if (event.message.includes('WebSocket') || event.message.includes('websocket')) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+        }
+      }, true);
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

@@ -1,0 +1,8 @@
+{
+  "name": "ᵗ°ᵈ°",
+  "description": "Application de productivité ultra-polyvalente combinant gamification, gestion de tâches, habitudes et planification.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

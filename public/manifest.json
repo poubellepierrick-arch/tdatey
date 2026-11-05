@@ -1,0 +1,25 @@
+{
+  "name": "ᵗ°ᵈ°",
+  "short_name": "ᵗ°ᵈ°",
+  "description": "Application de productivité, gamification et gestion d'habitudes ᵗ°ᵈ°",
+  "start_url": "/?fullscreenApplet=true",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#FFFDF7",
+  "theme_color": "#FFE500",
+  "icons": [
+    {
+      "src": "https://amac.neocities.org/todologomenphis.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://amac.neocities.org/todologomenphis.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
