@@ -110,8 +110,8 @@ export default function HabitsView({ db, updateDb, onDuplicate }: HabitsViewProp
 
   // Synchronisation du minuteur unifié pour les Habitudes et Tâches Récurrentes
   const hasActiveTimer = 
-    db.habits.some((h) => !h.isPaused && h.lastResumeTime) ||
-    db.recurringTasks?.some((rt) => !rt.isPaused && rt.lastResumeTime);
+    (db.habits || []).some((h) => !h.isPaused && h.lastResumeTime) ||
+    (db.recurringTasks || []).some((rt) => !rt.isPaused && rt.lastResumeTime);
 
   useEffect(() => {
     if (!hasActiveTimer) return;
@@ -130,10 +130,10 @@ export default function HabitsView({ db, updateDb, onDuplicate }: HabitsViewProp
   };
 
   // LOGIQUE DRAG & DROP POUR LES HABITUDES
-  const activeHabits = db.habits.filter(h => !h.isArchived);
+  const activeHabits = (db.habits || []).filter(h => !h.isArchived);
   const sortedHabits = [...activeHabits].sort((a, b) => {
-    const orderA = a.sortOrder !== undefined ? a.sortOrder : db.habits.indexOf(a);
-    const orderB = b.sortOrder !== undefined ? b.sortOrder : db.habits.indexOf(b);
+    const orderA = a.sortOrder !== undefined ? a.sortOrder : (db.habits || []).indexOf(a);
+    const orderB = b.sortOrder !== undefined ? b.sortOrder : (db.habits || []).indexOf(b);
     return orderA - orderB;
   });
 

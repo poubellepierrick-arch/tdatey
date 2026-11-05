@@ -33,28 +33,73 @@ function getGemini(): GoogleGenAI {
   return aiClient;
 }
 
-// Chaîne de repli automatique en cas de saturation d'un modèle : 3.8 -> 3.7 -> 3.6 -> 3.5 -> 2.5
-const FALLBACK_MODELS = [
-  "gemini-3.8-flash",
-  "gemini-3.7-flash",
-  "gemini-3.6-flash",
-  "gemini-3.5-flash",
-  "gemini-2.5-flash"
+// Utilitaires de timeout et de parsing sécurisé
+async function callWithTimeout<T>(fn: () => Promise<T>, ms: number): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`Timeout ${ms}ms`)), ms);
+  });
+  try {
+    const res = await Promise.race([fn(), timeoutPromise]);
+    if (timer) clearTimeout(timer);
+    return res;
+  } catch (err) {
+    if (timer) clearTimeout(timer);
+    throw err;
+  }
+}
+
+export function safeParseJson<T>(raw: string | undefined, fallback: T): T {
+  if (!raw || !raw.trim()) return fallback;
+  const clean = raw.trim()
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/```$/i, "")
+    .trim();
+  try {
+    return JSON.parse(clean);
+  } catch (e) {
+    const match = clean.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
+    if (match) {
+      try {
+        return JSON.parse(match[0]);
+      } catch (e2) {
+        // Ignorer
+      }
+    }
+    return fallback;
+  }
+}
+
+// Modèles officiels supportés @google/genai :
+// Priorité absolue à gemini-3.8-flash ; en cas de saturation temporaire (503) ou délai réseau,
+// bascule rapide sur gemini-3.1-flash-lite (< 1s de latence)
+const SUPPORTED_MODELS = [
+  { id: "gemini-3.8-flash", label: "Gemini 3.8 Flash", timeoutMs: 6500 },
+  { id: "gemini-3.1-flash-lite", label: "Gemini 3.1 Flash-Lite", timeoutMs: 9000 },
 ];
 
 async function generateContentWithFallback(ai: GoogleGenAI, requestParams: { contents: any; config?: any }) {
   let lastError: any = null;
-  for (const model of FALLBACK_MODELS) {
+  for (const m of SUPPORTED_MODELS) {
     try {
-      const response = await ai.models.generateContent({
-        model,
-        contents: requestParams.contents,
-        config: requestParams.config,
-      });
-      return response;
+      const response = await callWithTimeout(
+        () => ai.models.generateContent({
+          model: m.id,
+          contents: requestParams.contents,
+          config: requestParams.config,
+        }),
+        m.timeoutMs
+      );
+      return {
+        text: response.text || "",
+        response,
+        modelUsed: m.label,
+        modelId: m.id
+      };
     } catch (err: any) {
       lastError = err;
-      console.warn(`[Gemini Fallback] Modèle ${model} indisponible (${err?.message || err}). Tentative avec le modèle suivant...`);
+      console.warn(`[Gemini Fallback] Modèle ${m.id} indisponible (${err?.status || err?.message || err}). Tentative avec le modèle suivant...`);
     }
   }
   throw lastError;
@@ -156,7 +201,7 @@ Consignes de formatage strict :
     });
 
     const resultText = response.text;
-    res.json(JSON.parse(resultText || "{}"));
+    res.json(safeParseJson(resultText, {}));
   } catch (error: any) {
     console.error("Erreur dans analyze-journal:", error);
     res.status(500).json({ error: error.message });
@@ -216,7 +261,7 @@ Consignes strictes :
     });
 
     const resultText = response.text;
-    res.json(JSON.parse(resultText || "{}"));
+    res.json(safeParseJson(resultText, {}));
   } catch (error: any) {
     console.error("Erreur dans health-analysis:", error);
     res.status(500).json({ error: error.message });
@@ -437,7 +482,7 @@ Consignes strictes :
     });
 
     const resultText = response.text;
-    res.json(JSON.parse(resultText || '{"tasks":[],"habits":[],"preparations":[]}'));
+    res.json(safeParseJson(resultText, { tasks: [], habits: [], preparations: [] }));
   } catch (error: any) {
     console.error("Erreur dans smart-add:", error);
     res.status(500).json({ error: error.message });
@@ -534,7 +579,10 @@ Consignes strictes :
       }
     });
 
-    const parsed = JSON.parse(response.text || "{}");
+    const parsed = safeParseJson(response.text, null);
+    if (!parsed) {
+      return res.json(generateAlgorithmicFallback());
+    }
     res.json({ source: "gemini", ...parsed });
   } catch (error: any) {
     console.warn("Échec appel Gemini API dans /api/analytics/ai-insights, bascule sur le moteur algorithmique :", error.message);
@@ -804,10 +852,14 @@ CONSIGNES STRICTES :
       }
     });
 
-    const parsed = JSON.parse(response.text || "{}");
+    const parsed = safeParseJson<any>(response.text, null);
+    if (!parsed || !parsed.summary || !Array.isArray(parsed.helpAndAdvice)) {
+      throw new Error("Réponse JSON incomplète générée par l'IA.");
+    }
+
     res.json({
       timestamp: new Date().toISOString(),
-      modelUsed: "gemini-3.8-flash",
+      modelUsed: response.modelUsed,
       source: "gemini",
       ...parsed
     });
@@ -828,41 +880,59 @@ app.post("/api/gemini/advisor-chat", async (req, res) => {
     const hasApiKey = !!process.env.GEMINI_API_KEY;
     if (!hasApiKey) {
       return res.json({
-        reply: "Conseil instantané : Concentrez-vous sur votre tâche prioritaire du jour et maintenez la complétion de vos habitudes quotidiennes avant toute nouvelle planification.",
-        source: "algorithmic"
+        reply: "Conseil instantané : Concentrez-vous sur vos tâches prioritaires et maintenez la complétion de vos habitudes clés.",
+        source: "Moteur algorithmique"
       });
     }
 
     const ai = getGemini();
 
-    const prompt = `Voici l'ensemble des données de l'application tod° de l'utilisateur :
+    const systemInstruction = `Tu es le Conseiller Stratégique Personnel de l'application tod°.
+Ton rôle est d'analyser les données réelles de l'utilisateur (tâches, priorités calculées, habitudes, sommeil circadien, logs de temps et jeux vidéo) et de lui donner des réponses stratégiques concrètes, ultra-précises et immédiatement actionnables.
+
+RÈGLES DE RIGUEUR ET DE COHÉRENCE ABSOLUE :
+1. COMPTE ET QUANTITÉS : Compte rigoureusement chaque élément mentionné. Ne dis JAMAIS "choisis parmi ces deux solutions" s'il y en a trois ou une seule ! Énonce le nombre exact d'éléments (ex: "3 tâches prioritaires :", "1 habitude délaissée :").
+2. ANCRAGE STRICT DANS LES DONNÉES : Cite TOUJOURS les titres réels exacts des tâches, des habitudes, les durées réelles en minutes, les scores calculés (importance + urgence), les échéances et les heures réelles. N'invente AUCUNE donnée.
+3. STRUCTURE DE RÉPONSE SELON LA QUESTION :
+   - Si la question concerne les PRIORITÉS DU JOUR ("Que faire en priorité aujourd'hui ?") :
+     * Classe d'abord les tâches en retard (s'il y en a) avec leur date dépassée.
+     * Classe ensuite les tâches actives par ordre de score décroissant.
+     * Pour chaque tâche, donne : 1. [Titre exact] | [Durée estimée] | Score [Score] — [Action claire en 1 phrase].
+   - Si la question concerne le SOMMEIL / RÉVEIL ("Comment optimiser mon sommeil et mon réveil ?") :
+     * Analyse la dette de sommeil accumulée en minutes (avgSleepDebtMinutes).
+     * Compare l'heure cible de réveil (targetWakeTime) et l'heure cible de coucher (targetSleepTime) avec les retards récents (wakeUpDelayMinutes, bedTimeDelayMinutes).
+     * Donne l'heure précise de coucher recommandée ce soir pour absorber la dette.
+   - Si la question concerne les HABITUDES ("Mes habitudes sont-elles équilibrées ?") :
+     * Cite les habitudes qui maintiennent une série active (streak).
+     * Alerte sur les habitudes en retard ou délaissées (jours d'inactivité >= seuil d'alerte) en donnant l'action rapide à faire aujourd'hui.
+   - Si la question concerne le TEMPS ou les JEUX VIDÉO ("Bilan travail et quota jeux vidéo") :
+     * Analyse le volume de travail total vs loisirs et le solde de quota jeux vidéo (règle : 1h autorisée par jour).
+   - Pour toute AUTRE question :
+     * Réponds directement, factuellement et de façon structurée en t'appuyant sur ses données réelles.
+4. STYLE : Ultra-minimaliste, sobre, direct, structuré en puces ou numéros. Aucun verbiage, aucune flatterie, aucun adjectif décoratif. Termes simples, sobres et condensés. Rédige en français irréprochable.`;
+
+    const prompt = `DONNÉES RÉELLES DE L'UTILISATEUR DANS tod° :
 ${JSON.stringify(fullContext || {}, null, 2)}
 
-Question ou demande de l'utilisateur :
-"${message}"
-
-Consignes strictes :
-- Réponds de manière ultra-minimaliste, sobre, factuelle et condensée.
-- Pas de jargon, pas d'adjectifs décoratifs ni de flatterie. Termes simples et directs.
-- Base ta réponse exclusivement sur ses données réelles (tâches, priorités, habitudes, sommeil, temps).
-- Rédige en français.`;
+QUESTION OU DEMANDE :
+"${message}"`;
 
     const response = await generateContentWithFallback(ai, {
       contents: prompt,
       config: {
-        systemInstruction: "Tu es le conseiller stratégique personnel de tod°. Tu réponds de manière ultra-minimaliste, directe et pragmatique, sans aucun mot superflu."
+        systemInstruction
       }
     });
 
     res.json({
       reply: response.text || "Aucune réponse générée.",
-      source: "gemini"
+      source: response.modelUsed
     });
   } catch (err: any) {
     console.warn("Échec appel Gemini dans /api/gemini/advisor-chat :", err.message);
     res.json({
-      reply: "Conseil de repli : Vos priorités immédiates restent le traitement des tâches urgentes et la préservation de vos habitudes clés.",
-      source: "algorithmic"
+      reply: "Conseil de repli : Priorisez le traitement de vos tâches en retard et validez vos habitudes du jour.",
+      source: "Moteur algorithmique"
     });
   }
 });

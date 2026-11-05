@@ -32,7 +32,7 @@ export default function PlanningActiveTimer({ db, updateDb }: PlanningActiveTime
   if (activeChronoInfo) {
     const { id, type } = activeChronoInfo;
     if (type === "task") {
-      const t = db.tasks.find((x) => x.id === id);
+      const t = (db.tasks || []).find((x) => x.id === id);
       if (t) {
         activeItem = {
           id: t.id,
@@ -48,7 +48,7 @@ export default function PlanningActiveTimer({ db, updateDb }: PlanningActiveTime
         };
       }
     } else if (type === "habit") {
-      const h = db.habits.find((x) => x.id === id);
+      const h = (db.habits || []).find((x) => x.id === id);
       if (h) {
         activeItem = {
           id: h.id,
@@ -84,7 +84,7 @@ export default function PlanningActiveTimer({ db, updateDb }: PlanningActiveTime
 
   // Rétrocompatibilité : Recherche de tâche en cours de planification
   if (!activeItem) {
-    const oldActiveTask = db.tasks.find((t) => t.planningStatus === "in-progress");
+    const oldActiveTask = (db.tasks || []).find((t) => t.planningStatus === "in-progress");
     if (oldActiveTask) {
       activeItem = {
         id: oldActiveTask.id,

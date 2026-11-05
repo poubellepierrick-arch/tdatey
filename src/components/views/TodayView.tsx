@@ -648,7 +648,7 @@ export default function TodayView({ db, updateDb, onNavigate, sharedEvents = [],
 
       updateDb({
         ...db,
-        tasks: [newEvent, ...db.tasks]
+        tasks: [newEvent, ...(db.tasks || [])]
       });
     } catch (err) {
       console.error("Erreur lors de l'importation de l'événement partagé:", err);
@@ -656,7 +656,7 @@ export default function TodayView({ db, updateDb, onNavigate, sharedEvents = [],
   };
 
   const handleAddSubtaskInline = (parentTaskId: string, title: string) => {
-    const parentTask = db.tasks.find(tk => tk.id === parentTaskId);
+    const parentTask = (db.tasks || []).find(tk => tk.id === parentTaskId);
     const newSubtask: Task = {
       id: "task_" + Math.random().toString(36).substring(2, 11),
       title: title.trim(),
@@ -683,7 +683,7 @@ export default function TodayView({ db, updateDb, onNavigate, sharedEvents = [],
     };
     updateDb({
       ...db,
-      tasks: [...db.tasks, newSubtask]
+      tasks: [...(db.tasks || []), newSubtask]
     });
   };
   
@@ -709,9 +709,9 @@ export default function TodayView({ db, updateDb, onNavigate, sharedEvents = [],
 
   // Synchronisation du minuteur unifié (Tasks, Habits, RecurringTasks)
   const hasActiveTimer = 
-    db.tasks.some((t) => t.planningStatus === "in-progress" && !t.isPaused) ||
-    db.habits.some((h) => !h.isPaused && h.lastResumeTime) ||
-    db.recurringTasks?.some((rt) => !rt.isPaused && rt.lastResumeTime);
+    (db.tasks || []).some((t) => t.planningStatus === "in-progress" && !t.isPaused) ||
+    (db.habits || []).some((h) => !h.isPaused && h.lastResumeTime) ||
+    (db.recurringTasks || []).some((rt) => !rt.isPaused && rt.lastResumeTime);
 
   useEffect(() => {
     if (!hasActiveTimer) return;
@@ -749,10 +749,10 @@ export default function TodayView({ db, updateDb, onNavigate, sharedEvents = [],
   const handleLogTaskTime = (taskId: string, durationMinutes: number, dateStr?: string) => {
     const dStr = dateStr || todayStr;
     const extraSec = durationMinutes * 60;
-    const targetTask = db.tasks.find((t) => t.id === taskId);
+    const targetTask = (db.tasks || []).find((t) => t.id === taskId);
     if (!targetTask) return;
 
-    const updatedTasks = db.tasks.map((t) => {
+    const updatedTasks = (db.tasks || []).map((t) => {
       if (t.id === taskId) {
         const timeLogs = t.timeLog || [];
         const newLogEntry = { id: `log-${Date.now()}`, date: dStr, duration: durationMinutes };
@@ -792,7 +792,7 @@ export default function TodayView({ db, updateDb, onNavigate, sharedEvents = [],
   const handleLogHabitTime = (habitId: string, durationMinutes: number, dateStr?: string) => {
     const dStr = dateStr || todayStr;
     const extraSec = durationMinutes * 60;
-    const targetHabit = db.habits.find((h) => h.id === habitId);
+    const targetHabit = (db.habits || []).find((h) => h.id === habitId);
     if (!targetHabit) return;
 
     const updatedProfile = { ...db.userProfile };
@@ -822,7 +822,7 @@ export default function TodayView({ db, updateDb, onNavigate, sharedEvents = [],
     const currentHistVal = targetHabit.history?.[dStr] || 0;
     const newHistVal = targetHabit.type === "chrono" ? Math.max(0, currentHistVal + durationMinutes) : currentHistVal;
 
-    const updatedHabits = db.habits.map((h) => {
+    const updatedHabits = (db.habits || []).map((h) => {
       if (h.id === habitId) {
         return {
           ...h,
@@ -933,7 +933,7 @@ export default function TodayView({ db, updateDb, onNavigate, sharedEvents = [],
         getEventColorClasses={getEventColorClasses}
         formatTimer={formatTimer}
         getTaskElapsedSeconds={getTaskElapsedSeconds}
-        allTasks={db.tasks}
+        allTasks={db.tasks || []}
         onAddSubtaskInline={handleAddSubtaskInline}
         hideActionsByDefault={hideActionsByDefault}
         onDuplicate={onDuplicate}
@@ -948,15 +948,15 @@ export default function TodayView({ db, updateDb, onNavigate, sharedEvents = [],
   };
 
   // Récupérer les tâches non complétées et complétées de l'application (exclut les routines de planification)
-  const pendingTasks = db.tasks.filter((t) => !t.isArchived && !isTaskDone(t) && t.type !== "routine" && !t.isPlanningOnly);
-  const completedTasks = db.tasks.filter((t) => !t.isArchived && isTaskDone(t) && t.type !== "routine" && !t.isPlanningOnly);
+  const pendingTasks = (db.tasks || []).filter((t) => !t.isArchived && !isTaskDone(t) && t.type !== "routine" && !t.isPlanningOnly);
+  const completedTasks = (db.tasks || []).filter((t) => !t.isArchived && isTaskDone(t) && t.type !== "routine" && !t.isPlanningOnly);
 
-  const completedTodayTasks = db.tasks.filter((t) => {
+  const completedTodayTasks = (db.tasks || []).filter((t) => {
     return !t.isArchived && isTaskDone(t) && t.type !== "routine" && !t.isPlanningOnly && t.completedAt && t.completedAt.split("T")[0] === todayStr;
   });
 
   // Tâches non complétées mais travaillées aujourd'hui (workHistory > 0 ou chrono actif)
-  const workedTasksToday = db.tasks.filter((t) => {
+  const workedTasksToday = (db.tasks || []).filter((t) => {
     if (t.isArchived || t.type === "routine" || t.isPlanningOnly) return false;
     if (isTaskDone(t) && t.completedAt && t.completedAt.split("T")[0] === todayStr) return false;
     const workSec = (t.workHistory?.[todayStr] || 0) + (t.lastResumeTime && !t.isPaused ? Math.round((Date.now() - new Date(t.lastResumeTime).getTime()) / 1000) : 0);
@@ -964,7 +964,7 @@ export default function TodayView({ db, updateDb, onNavigate, sharedEvents = [],
   });
 
   // Habitudes travaillées aujourd'hui
-  const workedHabitsToday = db.habits.filter((h) => {
+  const workedHabitsToday = (db.habits || []).filter((h) => {
     if (h.isArchived) return false;
     const workSec = (h.workHistory?.[todayStr] || 0) + (h.lastResumeTime && !h.isPaused ? Math.round((Date.now() - new Date(h.lastResumeTime).getTime()) / 1000) : 0);
     const hasHistoryToday = h.history?.[todayStr] > 0;
@@ -1158,7 +1158,7 @@ export default function TodayView({ db, updateDb, onNavigate, sharedEvents = [],
   ];
 
   // 5 dernières tâches ajoutées (excluant les événements d'agenda, les routines et les tâches validées)
-  const lastAddedTasks = [...db.tasks]
+  const lastAddedTasks = [...(db.tasks || [])]
     .filter((t) => !t.isArchived && !isTaskDone(t) && t.type !== "event" && t.type !== "routine" && !t.isPlanningOnly)
     .sort((a, b) => {
       const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
@@ -1205,8 +1205,8 @@ export default function TodayView({ db, updateDb, onNavigate, sharedEvents = [],
 
   // Tâche ou habitude épinglée (Starred)
   const starredTasks = pendingTasks.filter((t) => !t.isArchived && t.isStarred && !isTaskDone(t));
-  const starredHabits = db.habits.filter((h) => !h.isArchived && (h as any).isStarred);
-  const starredRecurring = db.recurringTasks?.filter((rt) => !rt.isArchived && (rt as any).isStarred) || [];
+  const starredHabits = (db.habits || []).filter((h) => !h.isArchived && (h as any).isStarred);
+  const starredRecurring = (db.recurringTasks || []).filter((rt) => !rt.isArchived && (rt as any).isStarred);
 
   const pinnedElements = [
     ...starredTasks.map(t => ({ ...t, elType: "task" as const })),
@@ -1220,15 +1220,15 @@ export default function TodayView({ db, updateDb, onNavigate, sharedEvents = [],
     return orderA - orderB;
   });
 
-  const sortedHabits = db.habits.filter(h => !h.isArchived).sort((a, b) => {
-    const orderA = a.sortOrder !== undefined ? a.sortOrder : db.habits.indexOf(a);
-    const orderB = b.sortOrder !== undefined ? b.sortOrder : db.habits.indexOf(b);
+  const sortedHabits = (db.habits || []).filter(h => !h.isArchived).sort((a, b) => {
+    const orderA = a.sortOrder !== undefined ? a.sortOrder : (db.habits || []).indexOf(a);
+    const orderB = b.sortOrder !== undefined ? b.sortOrder : (db.habits || []).indexOf(b);
     return orderA - orderB;
   });
 
   // Éléments du "Jour de"
-  const dayOfTasks = db.tasks.filter((t) => !t.isArchived && t.isDayOf && !isTaskDone(t) && t.type !== "routine" && !t.isPlanningOnly);
-  const dayOfHabits = db.habits.filter((h) => !h.isArchived && h.isDayOf);
+  const dayOfTasks = (db.tasks || []).filter((t) => !t.isArchived && t.isDayOf && !isTaskDone(t) && t.type !== "routine" && !t.isPlanningOnly);
+  const dayOfHabits = (db.habits || []).filter((h) => !h.isArchived && h.isDayOf);
   const dayOfRecurring = (db.recurringTasks || []).filter((rt) => !rt.isArchived && rt.isDayOf);
   const dayOfElements = [
     ...dayOfTasks.map((t) => ({ ...t, elType: "task" as const })),
@@ -1254,8 +1254,8 @@ export default function TodayView({ db, updateDb, onNavigate, sharedEvents = [],
     const [draggedItem] = reorderedPinned.splice(draggedPinnedIndex, 1);
     reorderedPinned.splice(targetIndex, 0, draggedItem);
 
-    const updatedTasks = [...db.tasks];
-    const updatedHabits = [...db.habits];
+    const updatedTasks = [...(db.tasks || [])];
+    const updatedHabits = [...(db.habits || [])];
     const updatedRecurring = [...(db.recurringTasks || [])];
 
     reorderedPinned.forEach((item, index) => {
@@ -1304,7 +1304,7 @@ export default function TodayView({ db, updateDb, onNavigate, sharedEvents = [],
     const [draggedItem] = reorderedHabits.splice(draggedHabitIndex, 1);
     reorderedHabits.splice(targetIndex, 0, draggedItem);
 
-    const updatedHabits = [...db.habits];
+    const updatedHabits = [...(db.habits || [])];
     reorderedHabits.forEach((item, index) => {
       const idx = updatedHabits.findIndex(h => h.id === item.id);
       if (idx !== -1) {
@@ -1325,7 +1325,7 @@ export default function TodayView({ db, updateDb, onNavigate, sharedEvents = [],
     if (!selectedElementToPin) return;
     const [type, id] = selectedElementToPin.split("::");
     if (type === "task") {
-      const updatedTasks = db.tasks.map((t) => {
+      const updatedTasks = (db.tasks || []).map((t) => {
         if (t.id === id) {
           return { ...t, isStarred: true };
         }
@@ -1333,7 +1333,7 @@ export default function TodayView({ db, updateDb, onNavigate, sharedEvents = [],
       });
       updateDb({ ...db, tasks: updatedTasks });
     } else if (type === "habit") {
-      const updatedHabits = db.habits.map((h) => {
+      const updatedHabits = (db.habits || []).map((h) => {
         if (h.id === id) {
           return { ...h, isStarred: true };
         }
@@ -1341,7 +1341,7 @@ export default function TodayView({ db, updateDb, onNavigate, sharedEvents = [],
       });
       updateDb({ ...db, habits: updatedHabits });
     } else if (type === "recurring") {
-      const updatedRecurring = db.recurringTasks.map((rt) => {
+      const updatedRecurring = (db.recurringTasks || []).map((rt) => {
         if (rt.id === id) {
           return { ...rt, isStarred: true };
         }
@@ -1354,7 +1354,7 @@ export default function TodayView({ db, updateDb, onNavigate, sharedEvents = [],
 
   // Basculer l'état étoile (pin) pour une tâche
   const toggleStarTask = (taskId: string) => {
-    const updatedTasks = db.tasks.map((t) => {
+    const updatedTasks = (db.tasks || []).map((t) => {
       if (t.id === taskId) {
         return { ...t, isStarred: !t.isStarred };
       }
@@ -1364,7 +1364,7 @@ export default function TodayView({ db, updateDb, onNavigate, sharedEvents = [],
   };
 
   const toggleDayOfTask = (taskId: string) => {
-    const updatedTasks = db.tasks.map((t) => {
+    const updatedTasks = (db.tasks || []).map((t) => {
       if (t.id === taskId) {
         return { ...t, isDayOf: !t.isDayOf };
       }
@@ -1375,7 +1375,7 @@ export default function TodayView({ db, updateDb, onNavigate, sharedEvents = [],
 
   // Basculer l'état étoile (pin) pour une habitude
   const toggleStarHabit = (habitId: string) => {
-    const updatedHabits = db.habits.map((h) => {
+    const updatedHabits = (db.habits || []).map((h) => {
       if (h.id === habitId) {
         return { ...h, isStarred: !(h as any).isStarred };
       }
@@ -1385,7 +1385,7 @@ export default function TodayView({ db, updateDb, onNavigate, sharedEvents = [],
   };
 
   const toggleDayOfHabit = (habitId: string) => {
-    const updatedHabits = db.habits.map((h) => {
+    const updatedHabits = (db.habits || []).map((h) => {
       if (h.id === habitId) {
         return { ...h, isDayOf: !h.isDayOf };
       }
@@ -1406,7 +1406,7 @@ export default function TodayView({ db, updateDb, onNavigate, sharedEvents = [],
 
   // Complétion de tâche unifiée
   const toggleTaskCompletion = (taskId: string) => {
-    const target = db.tasks.find((t) => t.id === taskId);
+    const target = (db.tasks || []).find((t) => t.id === taskId);
     if (!target) return;
 
     let isTimerActive = target.planningStatus === "in-progress" && !target.isPaused;
@@ -1418,7 +1418,7 @@ export default function TodayView({ db, updateDb, onNavigate, sharedEvents = [],
     const wasCompleted = isTaskDone(target);
     const nextCompleted = !wasCompleted;
 
-    const updatedTasks = db.tasks.map((t) => {
+    const updatedTasks = (db.tasks || []).map((t) => {
       if (t.id === taskId) {
         return {
           ...t,
@@ -1464,7 +1464,7 @@ export default function TodayView({ db, updateDb, onNavigate, sharedEvents = [],
 
   // Sauvegarde après modification en ligne
   const handleSaveTask = (updatedTask: Task) => {
-    const updatedTasks = db.tasks.map((t) => (t.id === updatedTask.id ? updatedTask : t));
+    const updatedTasks = (db.tasks || []).map((t) => (t.id === updatedTask.id ? updatedTask : t));
     updateDb({
       ...db,
       tasks: updatedTasks
@@ -1477,7 +1477,7 @@ export default function TodayView({ db, updateDb, onNavigate, sharedEvents = [],
     const nowISO = new Date().toISOString();
     
     // 1. Pause les tâches normales
-    const updatedTasks = db.tasks.map((t) => {
+    const updatedTasks = (db.tasks || []).map((t) => {
       if (type === "task" && t.id === id) {
         return {
           ...t,
@@ -1499,7 +1499,7 @@ export default function TodayView({ db, updateDb, onNavigate, sharedEvents = [],
     });
 
     // 2. Pause les habitudes
-    const updatedHabits = db.habits.map((h) => {
+    const updatedHabits = (db.habits || []).map((h) => {
       if (type === "habit" && h.id === id) {
         return {
           ...h,
@@ -1561,14 +1561,14 @@ export default function TodayView({ db, updateDb, onNavigate, sharedEvents = [],
     };
     
     if (type === "task") {
-      const targetTask = db.tasks.find((t) => t.id === id);
+      const targetTask = (db.tasks || []).find((t) => t.id === id);
       if (!targetTask) return;
       const extraSec = targetTask.lastResumeTime
         ? Math.round((now - new Date(targetTask.lastResumeTime).getTime()) / 1000)
         : 0;
       const totalSec = (targetTask.accumulatedTime || 0) + extraSec;
 
-      const updatedTasks = db.tasks.map((t) => {
+      const updatedTasks = (db.tasks || []).map((t) => {
         if (t.id === id) {
           return {
             ...t,
@@ -1599,7 +1599,7 @@ export default function TodayView({ db, updateDb, onNavigate, sharedEvents = [],
       });
 
     } else if (type === "habit") {
-      const targetHabit = db.habits.find((h) => h.id === id);
+      const targetHabit = (db.habits || []).find((h) => h.id === id);
       if (!targetHabit) return;
 
       const extraSec = targetHabit.lastResumeTime
@@ -1630,7 +1630,7 @@ export default function TodayView({ db, updateDb, onNavigate, sharedEvents = [],
         updatedProfile.coins += extraCoins;
       }
 
-      const updatedHabits = db.habits.map((h) => {
+      const updatedHabits = (db.habits || []).map((h) => {
         if (h.id === id) {
           return {
             ...h,
@@ -1785,7 +1785,7 @@ export default function TodayView({ db, updateDb, onNavigate, sharedEvents = [],
 
     updateDb({
       ...db,
-      tasks: [newTask, ...db.tasks],
+      tasks: [newTask, ...(db.tasks || [])],
     });
 
     setNewTaskTitle("");
@@ -1795,7 +1795,7 @@ export default function TodayView({ db, updateDb, onNavigate, sharedEvents = [],
 
   // Complétion d'habitude binaire/rapide
   const toggleHabitValue = (habitId: string) => {
-    const targetH = db.habits.find((h) => h.id === habitId);
+    const targetH = (db.habits || []).find((h) => h.id === habitId);
     if (!targetH) return;
 
     const isCurrentlyDone = targetH.currentValue >= targetH.targetValue;
@@ -1809,7 +1809,7 @@ export default function TodayView({ db, updateDb, onNavigate, sharedEvents = [],
 
     const reachedTargetNow = nextValue >= targetH.targetValue;
 
-    const updatedHabits = db.habits.map((h) => {
+    const updatedHabits = (db.habits || []).map((h) => {
       if (h.id === habitId) {
         let streak = h.streak;
         if (reachedTargetNow && h.currentValue < h.targetValue) {
@@ -1848,7 +1848,7 @@ export default function TodayView({ db, updateDb, onNavigate, sharedEvents = [],
 
   // Incrémenter et décrémenter pour habit ou quantitative-counter
   const handleHabitPlus = (habitId: string) => {
-    const updatedHabits = db.habits.map((h) => {
+    const updatedHabits = (db.habits || []).map((h) => {
       if (h.id === habitId) {
         const nextValue = Math.min(h.targetValue, h.currentValue + 1);
         const reachedTargetNow = nextValue >= h.targetValue;
@@ -1872,7 +1872,7 @@ export default function TodayView({ db, updateDb, onNavigate, sharedEvents = [],
       return h;
     });
 
-    const targetH = db.habits.find((h) => h.id === habitId);
+    const targetH = (db.habits || []).find((h) => h.id === habitId);
     let updatedProfile = { ...db.userProfile };
     if (targetH && targetH.currentValue < targetH.targetValue && (targetH.currentValue + 1) >= targetH.targetValue) {
       updatedProfile.coins += targetH.rewardValue;
@@ -1886,7 +1886,7 @@ export default function TodayView({ db, updateDb, onNavigate, sharedEvents = [],
   };
 
   const handleHabitMinus = (habitId: string) => {
-    const updatedHabits = db.habits.map((h) => {
+    const updatedHabits = (db.habits || []).map((h) => {
       if (h.id === habitId) {
         const nextValue = Math.max(0, h.currentValue - 1);
         const historyCopy = { ...h.history };
@@ -1907,7 +1907,7 @@ export default function TodayView({ db, updateDb, onNavigate, sharedEvents = [],
       return h;
     });
 
-    const targetH = db.habits.find((h) => h.id === habitId);
+    const targetH = (db.habits || []).find((h) => h.id === habitId);
     let updatedProfile = { ...db.userProfile };
     if (targetH && targetH.currentValue >= targetH.targetValue && (targetH.currentValue - 1) < targetH.targetValue) {
       updatedProfile.coins = Math.max(0, updatedProfile.coins - targetH.rewardValue);
@@ -1925,7 +1925,7 @@ export default function TodayView({ db, updateDb, onNavigate, sharedEvents = [],
   const deleteTaskInline = (id: string) => {
     updateDb({
       ...db,
-      tasks: db.tasks.filter((t) => t.id !== id),
+      tasks: (db.tasks || []).filter((t) => t.id !== id),
     });
     setTaskDeletingId(null);
   };
@@ -1933,7 +1933,7 @@ export default function TodayView({ db, updateDb, onNavigate, sharedEvents = [],
   const archiveTaskInline = (id: string) => {
     updateDb({
       ...db,
-      tasks: db.tasks.map((t) => t.id === id ? { ...t, isArchived: true, archivedAt: new Date().toISOString() } : t),
+      tasks: (db.tasks || []).map((t) => t.id === id ? { ...t, isArchived: true, archivedAt: new Date().toISOString() } : t),
     });
     setTaskDeletingId(null);
   };
@@ -2136,7 +2136,7 @@ export default function TodayView({ db, updateDb, onNavigate, sharedEvents = [],
                               task={item.raw as Task} 
                               onSave={handleSaveTask} 
                               onCancel={() => setEditingTaskId(null)} 
-                              allTasks={db.tasks}
+                              allTasks={db.tasks || []}
                             />
                           </div>
                         ) : (

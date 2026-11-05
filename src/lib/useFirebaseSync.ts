@@ -62,7 +62,7 @@ export function useFirebaseSync() {
         }
 
         console.log("Données reçues d'un autre appareil / serveur. Mise à jour de l'état.");
-        setDb(cloudData as AppDatabase);
+        setDb(normalizeDatabase(cloudData));
         setSaveStatus("synced");
       } else if (isInitialLoadRef.current) {
         // Premier chargement et aucune donnée sur Firestore pour cet utilisateur
@@ -84,7 +84,7 @@ export function useFirebaseSync() {
 
         try {
           await setDoc(docRef, payload);
-          setDb(payload as AppDatabase);
+          setDb(normalizeDatabase(payload));
           setSaveStatus("synced");
         } catch (error: any) {
           console.warn("Erreur d'initialisation Firestore :", error);
@@ -175,20 +175,27 @@ export function useFirebaseSync() {
   };
 
   // Fonction de sauvegarde réactive, optimiste et ultra-robuste
-  const updateDbAndSave = (newData: AppDatabase, localOnly = false) => {
+  const updateDbAndSave = (newDataOrFn: AppDatabase | ((prev: AppDatabase) => AppDatabase), localOnly = false) => {
+    const rawData = typeof newDataOrFn === "function" ? newDataOrFn(db) : newDataOrFn;
+    if (!rawData || typeof rawData !== "object") {
+      console.error("Tentative d'enregistrement ignorée : données invalides", rawData);
+      return;
+    }
+
     // 1. Propagation de la complétion des tâches mères vers les sous-tâches
-    const { tasks: propagatedTasks, coinsGained } = propagateCompleteness(newData.tasks || [], newData.userProfile?.coins || 0);
+    const { tasks: propagatedTasks, coinsGained } = propagateCompleteness(rawData.tasks || [], rawData.userProfile?.coins || 0);
     
     const resolvedData = {
-      ...newData,
+      ...rawData,
       tasks: propagatedTasks,
-      userProfile: coinsGained > 0 && newData.userProfile 
-        ? { ...newData.userProfile, coins: newData.userProfile.coins + coinsGained }
-        : newData.userProfile
+      userProfile: coinsGained > 0 && rawData.userProfile 
+        ? { ...rawData.userProfile, coins: rawData.userProfile.coins + coinsGained }
+        : rawData.userProfile
     };
+    const normalized = normalizeDatabase(resolvedData);
 
     // 2. Mise à jour instantanée de l'état local (Optimiste - zéro latence d'interface)
-    setDb(resolvedData);
+    setDb(normalized);
 
     if (localOnly) {
       return;
@@ -200,7 +207,7 @@ export function useFirebaseSync() {
     }
 
     // 3. Empiler dans la file de sauvegarde debouncée (600ms) pour préserver la bande passante
-    pendingDataRef.current = resolvedData;
+    pendingDataRef.current = normalized;
     setSaveStatus("saving");
 
     if (debounceTimerRef.current) {
@@ -220,7 +227,7 @@ export function useFirebaseSync() {
       const { synced, wasChanged } = ensureHabitsTodayState(db);
       if (wasChanged) {
         console.log("Alignement automatique quotidien des habitudes détecté (local uniquement).");
-        setDb(synced);
+        setDb(normalizeDatabase(synced));
       }
     };
 
@@ -282,4 +289,32 @@ function purgeUndefinedKeys(obj: any): any {
     );
   }
   return obj;
+}
+
+export function normalizeDatabase(data: any): AppDatabase {
+  return {
+    ...DEFAULT_DATABASE_STATE,
+    ...(data || {}),
+    tasks: Array.isArray(data?.tasks) ? data.tasks : [],
+    habits: Array.isArray(data?.habits) ? data.habits : [],
+    recurringTasks: Array.isArray(data?.recurringTasks) ? data.recurringTasks : [],
+    preparations: Array.isArray(data?.preparations) ? data.preparations : [],
+    trackedActivities: Array.isArray(data?.trackedActivities) ? data.trackedActivities : [],
+    medications: Array.isArray(data?.medications) ? data.medications : [],
+    medicationLogs: Array.isArray(data?.medicationLogs) ? data.medicationLogs : [],
+    healthSuspicions: Array.isArray(data?.healthSuspicions) ? data.healthSuspicions : [],
+    rewards: Array.isArray(data?.rewards) && data.rewards.length > 0 ? data.rewards : DEFAULT_DATABASE_STATE.rewards,
+    userProfile: {
+      ...DEFAULT_DATABASE_STATE.userProfile,
+      ...(data?.userProfile || {})
+    },
+    dailyPlannings: Array.isArray(data?.dailyPlannings) ? data.dailyPlannings : [],
+    sleepWakeLogs: Array.isArray(data?.sleepWakeLogs) ? data.sleepWakeLogs : [],
+    journalLogs: Array.isArray(data?.journalLogs) ? data.journalLogs : [],
+    suitcaseItems: Array.isArray(data?.suitcaseItems) ? data.suitcaseItems : [],
+    suitcaseLists: Array.isArray(data?.suitcaseLists) ? data.suitcaseLists : [],
+    aiMemories: Array.isArray(data?.aiMemories) ? data.aiMemories : [],
+    proactiveSuggestions: Array.isArray(data?.proactiveSuggestions) ? data.proactiveSuggestions : [],
+    psyCards: Array.isArray(data?.psyCards) ? data.psyCards : [],
+  };
 }

@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Task, Habit, RecurringTask } from "./types";
-import { useFirebaseSync } from "./lib/useFirebaseSync";
+import { useFirebaseSync, normalizeDatabase } from "./lib/useFirebaseSync";
 import LoginPortal from "./components/views/LoginPortal";
 
 import Header from "./components/layout/Header";
@@ -29,7 +29,8 @@ import { IconProvider } from "./lib/IconContext";
 import { defaultIconComponents } from "./lib/Icons";
 
 export default function App() {
-  const { currentUser, loading, db, saveStatus, updateDbAndSave } = useFirebaseSync();
+  const { currentUser, loading, db: rawDb, saveStatus, updateDbAndSave } = useFirebaseSync();
+  const db = useMemo(() => normalizeDatabase(rawDb), [rawDb]);
   const [confirmLogout, setConfirmLogout] = useState<boolean>(false);
   const [currentView, setCurrentView] = useState<string>("today");
   const [showNewElement, setShowNewElement] = useState<boolean>(false);

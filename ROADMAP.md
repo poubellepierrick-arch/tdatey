@@ -191,7 +191,20 @@ Cette roadmap est divisée en **6 étapes de développement**. Toutes les créat
 ---
 
 ## 🛠 SUIVI DE l'ÉTAPE DU JOUR
-**Étape actuelle :** 🌙 SYSTÈME IDENTIQUE ET COMPLÉMENTAIRE POUR LES HEURES DE COUCHER (COMPLÉTÉ !)
+**Étape actuelle :** 🛡️ RÉSOLUTION DE L'ERREUR JSON.PARSE & REHAUSSEMENT DU CONSEILLER IA (COMPLÉTÉ !)
+*Améliorations apportées :*
+1. **🛡️ Éradication de l'Erreur `JSON.parse: unexpected character at line 1 column 1` (`AdvisorView.tsx`, `server.ts`)** :
+   - Identification de la cause racine : saturation temporaire de `gemini-3.8-flash` (code 503) combinée à une chaîne de repli qui tentait des modèles obsolètes/dépréciés sans timeout strict, menant à des dépassements de délai passerelle (Gateway Timeout 504) renvoyant une page HTML non-JSON.
+   - Refonte de `generateContentWithFallback` dans `server.ts` avec la fonction `callWithTimeout` : priorité à `gemini-3.8-flash` (délai max 6,5s), repli instantané sur `gemini-3.1-flash-lite` (< 1s de latence), et repli de sécurité sur le moteur algorithmique intégré si les deux échouent.
+   - Intégration de `safeParseJson` nettoyant automatiquement les balises markdown ```json et prévenant tout échec de parsing côté backend.
+   - Sécurisation du `handleRunAudit` et du `handleSendChatMessage` dans `AdvisorView.tsx` avec lecture préalable `res.text()` et parsing défensif try/catch (messages d'alerte propres 100% en ligne sans pop-up).
+2. **🧠 Rehaussement Stratégique et Rigueur des Réponses du Conseiller IA (`server.ts`, `AdvisorView.tsx`)** :
+   - Éradication absolue des hallucinations de comptage (ex: « choisis parmi ces deux solutions » alors qu'il y en a trois). Règle stricte imposant de compter précisément chaque élément avant de le nommer.
+   - Ancrage exclusif dans les données réelles : citation obligatoire des titres exacts de tâches, durées estimées réelles, scores calculés (importance + urgence), échéances réelles, séries d'habitudes (streaks) et dettes réelles de sommeil.
+   - Réponses directes structurées par type de question (Priorités d'action, Sommeil et Récupération circadienne, Santé des Habitudes, Équilibre Travail vs Quota Jeux Vidéo).
+   - Enrichissement des questions rapides en 1 clic dans `AdvisorView.tsx` et affichage dynamique de la source exacte du modèle utilisé (Gemini 3.8 Flash, Gemini 3.1 Flash-Lite ou Moteur algorithmique).
+
+**Étape précédente :** 🌙 SYSTÈME IDENTIQUE ET COMPLÉMENTAIRE POUR LES HEURES DE COUCHER (COMPLÉTÉ !)
 *Améliorations apportées :*
 1. **🌙 Modèle de Données & Calcul Circadien Normalisé (`types.ts`, `BedTimeHistoryManager.tsx`)** : Ajout des champs `bedTime`, `bedTimeDelayMinutes`, `bedTimeCoinsRewarded` et `bedTimeNotes` dans `SleepWakeLog` et `lastBedConfirmedDate` dans `UserProfile`. Implémentation d'un calcul cyclique robuste (`calculateBedDelta`) gérant le franchissement de minuit (avance = +1 CS/min, retard = -1 CS/min).
 2. **📈 Courbe SVG Dédiée aux Couchers (`BedTimeChart.tsx`)** : Échelle normalisée centrée sur la nuit (21h - 03h), ligne cible en tirets, cartouches statistiques synthétiques (Moyenne, Régularité, Ratio à l'heure, Solde CS), et infobulle interactive au survol.
@@ -568,6 +581,11 @@ Cette roadmap est divisée en **6 étapes de développement**. Toutes les créat
   *3. Modes d'affichage comparatifs : Barres comparatives (Travail bleu vs Loisir violet), Courbe de Balance nette journalière/périodique, et Courbes de Cumul progressif.*
   *4. Cartouches & Fiche détaillée : Synthèse condensée (Total Travail, Total Loisirs, Balance Travail, Moyenne de travail/période) et détail nominatif de chaque session de travail et de loisir au clic/survol.*
   *5. Commutateur d'analyses dans les Archives : Navigation instantanée par onglets entre **Flux CS**, **Temps Travail & Loisirs** et **7 Jours (CS)**.*
+
+- [x] **Étape Hors-Série Vicesimad-AD : Résilience Absolue de l'État & Correction TypeError 'some' sur db.habits (COMPLÉTÉ !)**
+  *1. Normalisation en amont (`normalizeDatabase`) : Sécurisation de tous les flux entrants de données (snapshots Firestore, chargements initiaux, sauvegardes optimistes locales, et alignement circadien) pour garantir que chaque collection (`tasks`, `habits`, `recurringTasks`, `preparations`, etc.) est systématiquement un tableau valide et jamais `undefined`.*
+  *2. Protection défensive dans toutes les vues : Remplacement systématique de `db.habits` et `db.tasks` par `(db.habits || [])` et `(db.tasks || [])` dans `TodayView`, `HabitsView`, `PlanningActiveTimer` et à la racine dans `App.tsx`.*
+  *3. Élimination des crashes au chargement et au rafraîchissement : Interface totalement résiliente face aux états asynchrones et aux documents Firestore incomplets.*
 
 
 

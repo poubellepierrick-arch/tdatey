@@ -7,7 +7,7 @@ import { computeCompleteAnalytics } from "../../lib/analyticsEngine";
 
 interface AdvisorViewProps {
   db: AppDatabase;
-  updateDb: (fn: (prev: AppDatabase) => AppDatabase) => void;
+  updateDb: (newDb: AppDatabase | ((prev: AppDatabase) => AppDatabase)) => void;
   onNavigate?: (view: string) => void;
 }
 
@@ -140,7 +140,7 @@ export const AdvisorView: React.FC<AdvisorViewProps> = ({ db, updateDb, onNaviga
     };
   }, [db]);
 
-  // Déclenchement de l'audit complet via Gemini 3.8
+  // Déclenchement de l'audit complet via Gemini 3.8 / Flash-Lite
   const handleRunAudit = async () => {
     setLoadingAudit(true);
     setAuditError(null);
@@ -150,16 +150,23 @@ export const AdvisorView: React.FC<AdvisorViewProps> = ({ db, updateDb, onNaviga
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(fullStats)
       });
-      if (!res.ok) {
-        throw new Error(`Erreur serveur (${res.status})`);
+      const text = await res.text();
+      let data: AIAuditResult;
+      try {
+        data = JSON.parse(text);
+      } catch (parseErr) {
+        throw new Error(res.ok ? "Format de données invalide reçu du serveur" : `Erreur serveur (${res.status})`);
       }
-      const data: AIAuditResult = await res.json();
+
+      if (!res.ok || (data as any).error) {
+        throw new Error((data as any).error || `Erreur serveur (${res.status})`);
+      }
       
       // Sauvegarde dans Firestore pour persistance sans LocalStorage
-      updateDb(prev => ({
-        ...prev,
+      updateDb({
+        ...db,
         aiAudit: data
-      }));
+      });
     } catch (err: any) {
       setAuditError(err.message || "Échec de l'analyse");
     } finally {
@@ -293,13 +300,19 @@ export const AdvisorView: React.FC<AdvisorViewProps> = ({ db, updateDb, onNaviga
           fullContext: fullStats
         })
       });
-      const data = await res.json();
+      const resText = await res.text();
+      let data: { reply?: string; source?: string; error?: string };
+      try {
+        data = JSON.parse(resText);
+      } catch (e) {
+        data = { reply: "Le serveur a renvoyé une réponse invalide.", source: "Moteur algorithmique" };
+      }
       setChatMessages(prev => [
         ...prev,
         {
           sender: "ai",
           text: data.reply || "Aucune réponse.",
-          source: data.source
+          source: data.source || "Gemini"
         }
       ]);
     } catch (err: any) {
@@ -308,7 +321,7 @@ export const AdvisorView: React.FC<AdvisorViewProps> = ({ db, updateDb, onNaviga
         {
           sender: "ai",
           text: "Service temporairement indisponible. Priorisez vos tâches en retard et vos habitudes clés.",
-          source: "algorithmic"
+          source: "Moteur algorithmique"
         }
       ]);
     } finally {
@@ -574,7 +587,8 @@ export const AdvisorView: React.FC<AdvisorViewProps> = ({ db, updateDb, onNaviga
           {[
             "Que faire en priorité aujourd'hui ?",
             "Comment optimiser mon sommeil et mon réveil ?",
-            "Mes habitudes sont-elles équilibrées ?"
+            "Mes habitudes sont-elles équilibrées ?",
+            "Bilan travail et quota jeux vidéo"
           ].map(q => (
             <button
               key={q}
@@ -600,8 +614,8 @@ export const AdvisorView: React.FC<AdvisorViewProps> = ({ db, updateDb, onNaviga
                 }`}
               >
                 <div className="flex items-center justify-between text-[8px] font-black uppercase text-gray-600 mb-1">
-                  <span>{m.sender === "user" ? "Vous" : "Conseiller IA (Gemini 3.8)"}</span>
-                  {m.source && <span>[{m.source}]</span>}
+                  <span>{m.sender === "user" ? "Vous" : `Conseiller IA • ${m.source || "Gemini"}`}</span>
+                  {m.source && <span className="border border-black bg-gray-100 px-1 py-0.2">{m.source}</span>}
                 </div>
                 <p className="whitespace-pre-line">{m.text}</p>
               </div>
